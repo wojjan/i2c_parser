@@ -3,9 +3,6 @@ import os
 import glob
 import argparse
 import logging
-import tkinter as tk
-from tkinter import filedialog
-from tkinter import messagebox
 
 SMT_PATH = ""
 CONFIG_FILE_NAME = "config.cfg"
@@ -137,27 +134,6 @@ def transaction_analyse(transaction, lines):
             transaction_register = int(transaction_split[address_occurence_first + 12], 16)
             logging.info("TRANSACTION_READ_FROM: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
             statistics_update(stats_read_from, transaction_address, transaction_register)
-            '''
-            if transaction_address in stats_read_from:
-                logging.info("transaction_address in stats_read_from " + str(stats_read_from))
-                logging.info(str(stats_read_from[transaction_address]))
-                register_stats = stats_read_from[transaction_address]
-                if transaction_register in register_stats:
-                    logging.info("transaction_register in stats_read_from " + str(register_stats))
-                    v = register_stats[transaction_register]
-                    v += 1
-                    register_stats.update({transaction_register: v})
-                    logging.info("transaction_register updated in stats_read_from " + str(register_stats))
-                else:
-                    logging.info("transaction_register NOT in register_stats " + str(register_stats))
-                    register_stats.update({transaction_register: 1})
-                    logging.info("   updated register_stats " + str(register_stats))
-                    stats_read_from.update({transaction_address: register_stats})
-                    logging.info("transaction_register NOT in register_stats - updated stats_read_from " + str(stats_read_from[transaction_address]))
-            else:
-                stats_read_from.update({transaction_address: {transaction_register: 1}})
-                logging.info("transaction_address(" + str(transaction_address) + ") NOT in stats_read_from, updated: " + str(stats_read_from))
-            '''
 
             data_occurence_first = transaction_split.index("\"data\"")
             data_occurence_count = transaction_split.count("\"data\"")
@@ -220,11 +196,6 @@ def main():
 
             input_file_abs_name = os.path.abspath(args.input[0])
             logging.info("input_file_abs_name = " + input_file_abs_name)
-            #config_update('input_file_abs_name', input_file_abs_name)
-
-            #r = input_file.readline()
-            #config = json.loads(r)
-            #logging.info(len(r))
 
             output_file_abs_name = input_file_abs_name[:input_file_abs_name.find('.')] + '.out'
             logging.info("output_file_abs_name = " + output_file_abs_name)
@@ -296,12 +267,15 @@ def main():
     logging.info("transactions = " + str(transactions))
 
     logging.info("\n")
-    logging.info("stats_write:\n" + str(stats_write))
+    logging.info("stats_write:")
+    logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
     logging.info("\n")
-    logging.info("stats_read:\n" + str(stats_read))
+    logging.info("stats_read:")
+    logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
     logging.info("\n")
-    logging.info("stats_read_from:\n" + str(stats_read_from))
-    
+    logging.info("stats_read_from:")
+    logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
+
     logging.info("Completed successfully!")
     sys.exit(0)
     '''
