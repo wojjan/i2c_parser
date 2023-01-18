@@ -7,7 +7,7 @@ import logging
 SMT_PATH = ""
 CONFIG_FILE_NAME = "config.cfg"
 LOG_FILE_NAME = "i2c_parse.log"
-I2C_PREFIX = "\"I2C [2]\","
+I2C_PREFIX = "\"I2C"
 I2C_PHASE_START = "\"start\""
 I2C_PHASE_ADDRESS = "\"address\""
 I2C_PHASE_DATA = "\"data\""
@@ -100,29 +100,37 @@ def transaction_analyse(transaction, lines):
     global transaction_read_from_count
     global transactions
     global transaction_unknown
-    
+ 
     transactions += 1
     transaction_split = transaction.split(",")
     logging.info(transaction_split)
     logging.info(transaction_split.count("\"address\""))
     
+    if 0 == transaction_split.count("\"address\""):
+        transaction_unknown += 1
+        return FAILURE
     address_occurence_first = transaction_split.index("\"address\"")
-    logging.info(address_occurence_first)
-    
-    transaction_address = int(transaction_split[address_occurence_first + 4], 16)
+    logging.info(f"address_occurence_first={address_occurence_first}")
+    # f"lines={lines}"
+    transaction_address = int(transaction_split[address_occurence_first + 3], 16)
+
     logging.info("transaction_address = " + str(hex(transaction_address)) + " (" + str(transaction_address) + ")")
+    try:    
+        transaction_register = int(transaction_split[address_occurence_first + 11], 16)
+        logging.info("TRANSACTION_READ: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
+    except ValueError:
+        transaction_unknown += 1
+        return FAILURE
         
-    if "true" == transaction_split[address_occurence_first + 5]:
+    if "true" == transaction_split[address_occurence_first + 6]:
         transaction_type = TRANSACTION_READ
         transaction_read_count += 1
-        transaction_register = int(transaction_split[address_occurence_first + 12], 16)
-        logging.info("TRANSACTION_READ: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
-        statistics_update(stats_read, transaction_address, transaction_register)
+        logging.info("TRANSACTION_READ")
     else:
         if 1 == transaction_split.count("\"address\""):
             transaction_type = TRANSACTION_WRITE
             transaction_write_count += 1
-            transaction_register = int(transaction_split[address_occurence_first + 12], 16)
+            transaction_register = int(transaction_split[address_occurence_first + 11], 16)
             logging.info("TRANSACTION_WRITE: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
             statistics_update(stats_write, transaction_address, transaction_register)
             return OK
@@ -131,7 +139,7 @@ def transaction_analyse(transaction, lines):
             transaction_type = TRANSACTION_READ_FROM
             transaction_read_from_count += 1
 
-            transaction_register = int(transaction_split[address_occurence_first + 12], 16)
+            transaction_register = int(transaction_split[address_occurence_first + 11], 16)
             logging.info("TRANSACTION_READ_FROM: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
             statistics_update(stats_read_from, transaction_address, transaction_register)
 
@@ -209,11 +217,19 @@ def main():
                 transaction_ready = 0
                 while line:
                     line = input_file.readline()
-                    lines = lines + 1
                     if line.startswith(I2C_PREFIX):
                         # remove the prefix
                         line_tmp = line[len(I2C_PREFIX):]
+                        #logging.info("1:" + line_tmp)
+                        # and the chars until ",
+                        str_tmp = "\","
+                        line_tmp = line_tmp[line_tmp.find(str_tmp) + len(str_tmp):]
+                        #logging.info("2:" + line_tmp)
+                        
+                        #split the line into components
                         line_split = line_tmp.split(",")
+                        logging.info("line_split[0]= " + line_split[0])
+                        logging.info("line_split[1]= " + line_split[1])
                         # frame format now: type,start_time,duration,"ack","address","read","data"
                         #output_file.write(str(line_split))
                         if line_tmp.startswith(I2C_PHASE_START):
@@ -221,20 +237,24 @@ def main():
                             starts = starts + 1
                             line_current = line_tmp[:line_tmp.find(CRLF)]
                             transaction += line_current
-                        if line_tmp.startswith(I2C_PHASE_ADDRESS):
+                        elif line_tmp.startswith(I2C_PHASE_ADDRESS):
                             phase_type = ADDRESS_MODE
                             addresses = addresses + 1
                             addressed = 1
                             line_current = line_tmp[:line_tmp.find(CRLF)]
                             transaction += line_current
-                        if line_tmp.startswith(I2C_PHASE_DATA):
+                            #"address" line can be not ended with ","
+                            if not line_current.endswith(','):
+                                transaction += ","
+                        elif line_tmp.startswith(I2C_PHASE_DATA):
                             phase_type = DATA_MODE
                             datas = datas + 1
                             line_current = line_tmp[:line_tmp.find(CRLF)]
                             transaction += line_current
-                            #"data" line is not ended with ","
-                            transaction += ","
-                        if line_tmp.startswith(I2C_PHASE_STOP):
+                            #"data" line can be not ended with ","
+                            if not line_current.endswith(','):
+                                transaction += ","
+                        elif line_tmp.startswith(I2C_PHASE_STOP):
                             phase_type = STOP_MODE
                             stops = stops + 1
                             # we want to include CRLF
@@ -242,12 +262,15 @@ def main():
                             output_file.write(transaction)
                             transaction_ready = 1
                             addressed = 0
+                        else:
+                            logging.warning("unrecognized transaction type " + line_split[0])
                             
                     if 1 == transaction_ready:
                         transaction_analyse(transaction, lines)
                         transaction = ""
                         transaction_ready = 0
-                            
+                    lines = lines + 1
+                    logging.info("line = " + str(lines))
             
     if args.clean:
         logging.info("clean up")
@@ -267,14 +290,18 @@ def main():
     logging.info("transactions = " + str(transactions))
 
     logging.info("\n")
-    logging.info("stats_write:")
-    logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
+    logging.info("stats_write:\n")
+    #logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
+    logging.info('{' + '\n '.join((f"{hex(a)}: {{{', '.join(f'{hex(b)}: {c}' for b, c in bc.items())}}}" for a, bc in stats_write.items())) + '}')
+
     logging.info("\n")
-    logging.info("stats_read:")
-    logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
+    logging.info("stats_read:\n")
+    #logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
+    logging.info('{' + '\n '.join((f"{hex(a)}: {{{', '.join(f'{hex(b)}: {c}' for b, c in bc.items())}}}" for a, bc in stats_read.items())) + '}')
     logging.info("\n")
-    logging.info("stats_read_from:")
-    logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
+    logging.info("stats_read_from:\n")
+    #logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
+    logging.info('{' + '\n '.join((f"{hex(a)}: {{{', '.join(f'{hex(b)}: {c}' for b, c in bc.items())}}}" for a, bc in stats_read_from.items())) + '}')
 
     logging.info("Completed successfully!")
     sys.exit(0)
