@@ -210,7 +210,7 @@ def main():
             while line:
                 line = input_file.readline()
                 total_lines = total_lines + 1
-        print("total lines number = " + str(total_lines))
+        logging.info("total lines number = " + str(total_lines))
                 
         with open(args.input[0], "r") as input_file:
             logging.info("input_file opened for read")
@@ -318,8 +318,7 @@ def main():
 
     # report unknown transactions
     logging.info("\n")
-    logging.info("unknown transactions:")
-    logging.info(str(transactions_unknown_list))
+    logging.info("unknown transactions: " + str(transactions_unknown_list))
 
 
     # write the statistics to the files
