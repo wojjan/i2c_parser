@@ -204,6 +204,15 @@ def main():
     if args.input:
         logging.info("select the input file")             
         with open(args.input[0], "r") as input_file:
+            logging.info("calculate total lines number in " + args.input[0] + "...")
+            line = True
+            total_lines = 0
+            while line:
+                line = input_file.readline()
+                total_lines = total_lines + 1
+        print("total lines number = " + str(total_lines))
+                
+        with open(args.input[0], "r") as input_file:
             logging.info("input_file opened for read")
 
             input_file_abs_name = os.path.abspath(args.input[0])
