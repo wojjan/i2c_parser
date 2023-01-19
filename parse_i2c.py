@@ -16,7 +16,7 @@ I2C_PHASE_STOP = "\"stop\""
 TRANSACTION_READ = 1
 TRANSACTION_WRITE = 2
 TRANSACTION_READ_FROM = 3
-TRANSACTION_UNKNOWN = 4
+transactions_unknown = 4
 
 INIT_MODE = 0
 START_MODE = 1
@@ -32,12 +32,13 @@ FAILURE = 1
 transaction_read_count = 0
 transaction_write_count = 0
 transaction_read_from_count = 0
-transaction_unknown = 0
+transactions_unknown = 0
 transactions = 0
 
 stats_read = {}
 stats_read_from = {}
 stats_write = {}
+transactions_unknown_list = [] # stores timestamp of unknown transactions
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -99,7 +100,7 @@ def transaction_analyse(transaction, lines):
     global transaction_write_count
     global transaction_read_from_count
     global transactions
-    global transaction_unknown
+    global transactions_unknown
  
     transactions += 1
     transaction_split = transaction.split(",")
@@ -107,7 +108,8 @@ def transaction_analyse(transaction, lines):
     logging.info(transaction_split.count("\"address\""))
     
     if 0 == transaction_split.count("\"address\""):
-        transaction_unknown += 1
+        transactions_unknown_list.append(transaction_split[1])
+        transactions_unknown += 1
         return FAILURE
     address_occurence_first = transaction_split.index("\"address\"")
     logging.info(f"address_occurence_first={address_occurence_first}")
@@ -119,7 +121,8 @@ def transaction_analyse(transaction, lines):
         transaction_register = int(transaction_split[address_occurence_first + 11], 16)
         logging.info("TRANSACTION_READ: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
     except ValueError:
-        transaction_unknown += 1
+        transactions_unknown_list.append(transaction_split[address_occurence_first+1])
+        transactions_unknown += 1
         return FAILURE
         
     if "true" == transaction_split[address_occurence_first + 6]:
@@ -150,8 +153,9 @@ def transaction_analyse(transaction, lines):
             return OK
         else:
             logging.warning("\"address\" occured "+ str(transaction_split.count("\"address\"")) + " time(s) in line " + str(lines))
-            transaction_type = TRANSACTION_UNKNOWN
-            transaction_unknown += 1
+            transaction_type = transactions_unknown
+            transactions_unknown_list.append(transaction_split[address_occurence_first+1])
+            transactions_unknown += 1
             return FAILURE
 
     logging.info(transaction_split[address_occurence_first + 5])
@@ -286,7 +290,7 @@ def main():
     logging.info("transaction_write_count = " + str(transaction_write_count))
     logging.info("transaction_read_count = " + str(transaction_read_count))
     logging.info("transaction_read_from_count = " + str(transaction_read_from_count))
-    logging.info("transaction_unknown = " + str(transaction_unknown))
+    logging.info("transactions_unknown = " + str(transactions_unknown))
     logging.info("transactions = " + str(transactions))
 
     logging.info("\n")
@@ -302,6 +306,11 @@ def main():
     logging.info("stats_read_from:\n")
     #logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
     logging.info('{' + '\n '.join((f"{hex(a)}: {{{', '.join(f'{hex(b)}: {c}' for b, c in bc.items())}}}" for a, bc in stats_read_from.items())) + '}')
+
+    # report unknown transactions
+    logging.info("\n")
+    logging.info("unknown transactions:")
+    logging.info(str(transactions_unknown_list))
 
 
     # write the statistics to the files
