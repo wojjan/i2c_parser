@@ -135,7 +135,8 @@ def transaction_analyse(transaction, lines):
             transaction_write_count += 1
             transaction_register = int(transaction_split[address_occurence_first + 11], 16)
             logging.info("TRANSACTION_WRITE: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
-            statistics_update(stats_write, transaction_address, transaction_register)
+            datas = transaction_split.count("\"data\"")
+            statistics_update(stats_write, transaction_address, transaction_register, datas)
             return OK
 
         if 2 == transaction_split.count("\"address\""):
@@ -144,7 +145,8 @@ def transaction_analyse(transaction, lines):
 
             transaction_register = int(transaction_split[address_occurence_first + 11], 16)
             logging.info("TRANSACTION_READ_FROM: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
-            statistics_update(stats_read_from, transaction_address, transaction_register)
+            datas = transaction_split.count("\"data\"") - 1
+            statistics_update(stats_read_from, transaction_address, transaction_register,datas)
 
             data_occurence_first = transaction_split.index("\"data\"")
             data_occurence_count = transaction_split.count("\"data\"")
@@ -161,7 +163,7 @@ def transaction_analyse(transaction, lines):
     logging.info(transaction_split[address_occurence_first + 5])
     return OK
 
-def statistics_update(stat, address, register):
+def statistics_update(stat, address, register, datas):
     #logging.info("transaction_register = " + str(hex(transaction_register)))
     #logging.info("transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
     if address in stat:
