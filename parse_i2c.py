@@ -40,6 +40,8 @@ stats_read_from = {}
 stats_write = {}
 transactions_unknown_list = [] # stores timestamp of unknown transactions
 
+suspicious_device_data_list = []
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
@@ -101,7 +103,8 @@ def transaction_analyse(transaction, lines):
     global transaction_read_from_count
     global transactions
     global transactions_unknown
- 
+    global suspicious_device_data_list
+    
     transactions += 1
     transaction_split = transaction.split(",")
     logging.info(transaction_split)
@@ -146,12 +149,35 @@ def transaction_analyse(transaction, lines):
             transaction_register = int(transaction_split[address_occurence_first + 11], 16)
             logging.info("TRANSACTION_READ_FROM: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
             data_number = transaction_split.count("\"data\"") - 1
-            statistics_update(stats_read_from, transaction_address, transaction_register,data_number)
+            statistics_update(stats_read_from, transaction_address, transaction_register, data_number)
+                
+            if 0x70 == transaction_address:
+                if 0x97 == transaction_register:
+                    logging.info("transaction_address = 0x70 AND transaction_register = 0x97")
+                    # first "data" is for register number - skip it
+                    tmp = transaction_split[transaction_split.index("\"data\"")+1:]
+                    logging.info("tmp =" + str(tmp))
+                    d_count = tmp.count("\"data\"")
+                    logging.info("d_count= " + str(d_count))
+                    d_index1 = 0
+                    d_index2 = 0
+                    d_tuple = ()
+                    for i in range(d_count):
+                        d_index2 = tmp[d_index1:].index("\"data\"")
+                        logging.info("d_index2= " + str(d_index2))
+                        #tmp = tmp[d_index:]
+                        #logging.info("tmp=" + str(tmp))
+                        data = int(tmp[d_index1 + d_index2 + 4], 16)
+                        d_tuple = d_tuple + (data,)
+                        logging.info("tuple=" + str(d_tuple))
+                        d_index1 = d_index1 + d_index2 + 1
+                    suspicious_device_data_list.append(d_tuple)
+                    logging.info("d_tuple= " + str(d_tuple))
 
-            data_occurence_first = transaction_split.index("\"data\"")
-            data_occurence_count = transaction_split.count("\"data\"")
-            logging.info("data_occurence_first = " + str(data_occurence_first))
-            logging.info("data_occurence_count = " + str(data_occurence_count))
+            #data_occurence_first = transaction_split.index("\"data\"")
+            #data_occurence_count = transaction_split.count("\"data\"")
+            #logging.info("data_occurence_first = " + str(data_occurence_first))
+            #logging.info("data_occurence_count = " + str(data_occurence_count))
             return OK
         else:
             logging.warning("\"address\" occured "+ str(transaction_split.count("\"address\"")) + " time(s) in line " + str(lines))
@@ -217,14 +243,36 @@ def statistics_update(stat, address, register, data_number):
         stat.update({address: {register: {data_number: 1}}}) # a new entry at device number level
         logging.info("address(" + str(address) + ") NOT in stat, updated: " + str(stat))
     
-    
+
+def transaction_verify_suspicious(transaction, lines):
+    # suspicious device/register access handling
+    transaction_split = transaction.split(",")
+    address_occurence_first = transaction_split.index("\"address\"")
+    transaction_register = int(transaction_split[address_occurence_first + 11], 16)
+    transaction_address = int(transaction_split[address_occurence_first + 3], 16)
+
+    if 0x70 == transaction_address:
+        if 0x97 == transaction_register:
+            logging.info("transaction_address = 0x70 AND transaction_register = 0x97")
+            d_count = transaction_split.count("\"data\"")
+            d_index = 0
+            d_tuple = ()
+            for i in range(d_count):
+                d_index = transaction_split[d_index:].index("\"data\"")
+                data = int(transaction_split[d_index + 4], 16)
+                d_tuple = d_tuple + (data,)
+            suspicious_device_data_list.append(d_tuple)
+            logging.info("d_tuple= " + str(d_tuple))
+
+
+
 def main():
     lines = 0
     starts = 0
     addresses = 0
     datas = 0
     stops = 0
-
+    
     logging.basicConfig(level=logging.INFO,
         format='%(asctime)s %(message)s',
         handlers=[logging.FileHandler(LOG_FILE_NAME), logging.StreamHandler()])
@@ -315,6 +363,8 @@ def main():
                         transaction_analyse(transaction, lines)
                         transaction = ""
                         transaction_ready = 0
+                        #transaction_verify_suspicious(transaction, lines)
+                        
                     lines = lines + 1
                     logging.info("line = " + str(lines))
             
@@ -352,6 +402,11 @@ def main():
     # report unknown transactions
     logging.info("\n")
     logging.info("unknown transactions: " + str(transactions_unknown_list))
+
+    # report suspicious_device_data_list
+    logging.info("\n")
+    logging.info("suspicious_device_data_list: " + str(suspicious_device_data_list))
+
 
 
     # write the statistics to the files
