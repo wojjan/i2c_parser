@@ -162,7 +162,8 @@ def transaction_analyse(transaction, lines):
 
     logging.info(transaction_split[address_occurence_first + 5])
     return OK
-
+    
+'''
 def statistics_update(stat, address, register, data_number):
     #logging.info("transaction_register = " + str(hex(transaction_register)))
     #logging.info("transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
@@ -184,6 +185,36 @@ def statistics_update(stat, address, register, data_number):
             logging.info("register NOT in register_stats - updated stat " + str(stat[address]))
     else:
         stat.update({address: {register: 1}}) # a new entry at device number level
+        logging.info("address(" + str(address) + ") NOT in stat, updated: " + str(stat))
+'''    
+    
+def statistics_update(stat, address, register, data_number):
+    #logging.info("transaction_register = " + str(hex(transaction_register)))
+    #logging.info("transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
+    if address in stat:
+        logging.info("address in stat " + str(stat))
+        logging.info(str(stat[address]))
+        register_stats = stat[address]
+        if register in register_stats:
+            logging.info("register in stat " + str(register_stats))
+            ops_per_data_number = register_stats[register]
+            if data_number in ops_per_data_number:
+                v = ops_per_data_number[data_number]
+                v = v + 1
+                ops_per_data_number.update({data_number: v})
+            else:
+                ops_per_data_number.update({data_number: 1}) # a new entry at data_number level
+            register_stats.update({register: ops_per_data_number})
+            logging.info("register updated in stat " + str(register_stats))
+        else:
+            logging.info("register NOT in register_stats " + str(register_stats))
+            register_stats.update({register: {data_number: 1}}) # a new entry at register number level
+            logging.info("updated register_stats " + str(register_stats))
+            
+        stat.update({address: register_stats})
+        logging.info("register NOT in register_stats - updated stat " + str(stat[address]))
+    else:
+        stat.update({address: {register: {data_number: 1}}}) # a new entry at device number level
         logging.info("address(" + str(address) + ") NOT in stat, updated: " + str(stat))
     
     
