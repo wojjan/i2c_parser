@@ -303,8 +303,42 @@ def main():
     #logging.info({hex(a): {hex(b): c for b, c in bc.items()} for a, bc in stats_read_from.items()})    
     logging.info('{' + '\n '.join((f"{hex(a)}: {{{', '.join(f'{hex(b)}: {c}' for b, c in bc.items())}}}" for a, bc in stats_read_from.items())) + '}')
 
+
+    # write the statistics to the files
+    stat_file_abs_name = input_file_abs_name[:input_file_abs_name.find('.')] + '_stats_write.stat'
+    try:
+        stat_file = open(stat_file_abs_name, "w")
+        stat_file.write('{' + '\n '.join((f"{hex(a)}: {{{', '.join(f'{hex(b)}: {c}' for b, c in bc.items())}}}" for a, bc in stats_write.items())) + '}')
+        stat_file.close()
+    except:
+        logging.error("can't open stat_file: ", stat_file_abs_name)
+        sys.exit(1)
+
+
+    stat_file_abs_name = input_file_abs_name[:input_file_abs_name.find('.')] + '_stats_read.stat'
+    try:
+        stat_file = open(stat_file_abs_name, "w")
+        stat_file.write('{' + '\n '.join((f"{hex(a)}: {{{', '.join(f'{hex(b)}: {c}' for b, c in bc.items())}}}" for a, bc in stats_read.items())) + '}')
+        stat_file.close()
+    except:
+        logging.error("can't open stat_file: ", stat_file_abs_name)
+        sys.exit(1)
+
+    
+    stat_file_abs_name = input_file_abs_name[:input_file_abs_name.find('.')] + '_stats_read_from.stat'
+    try:
+        stat_file = open(stat_file_abs_name, "w")
+        stat_file.write('{' + '\n '.join((f"{hex(a)}: {{{', '.join(f'{hex(b)}: {c}' for b, c in bc.items())}}}" for a, bc in stats_read_from.items())) + '}')
+        #stat_file.write("\n" + str(stats_read_from))
+        stat_file.close()
+    except:
+        logging.error("can't open stat_file: ", stat_file_abs_name)
+        sys.exit(1)
+
     logging.info("Completed successfully!")
     sys.exit(0)
+
+
     '''
     except: Exception as ex:
         template = "An exception of type {0} occurred. Arguments:\n{1!r}"
