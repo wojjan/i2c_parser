@@ -13,6 +13,9 @@ I2C_PHASE_ADDRESS = "\"address\""
 I2C_PHASE_DATA = "\"data\""
 I2C_PHASE_STOP = "\"stop\""
 
+WATCH_ADDRESS = 0x70
+WATCH_REGISTER = 0x97
+
 TRANSACTION_READ = 1
 TRANSACTION_WRITE = 2
 TRANSACTION_READ_FROM = 3
@@ -151,8 +154,8 @@ def transaction_analyse(transaction, lines):
             data_number = transaction_split.count("\"data\"") - 1
             statistics_update(stats_read_from, transaction_address, transaction_register, data_number)
                 
-            if 0x70 == transaction_address:
-                if 0x97 == transaction_register:
+            if WATCH_ADDRESS == transaction_address:
+                if WATCH_REGISTER == transaction_register:
                     logging.info("transaction_address = 0x70 AND transaction_register = 0x97")
                     # first "data" is for register number - skip it
                     tmp = transaction_split[transaction_split.index("\"data\"")+1:]
@@ -161,18 +164,17 @@ def transaction_analyse(transaction, lines):
                     logging.info("d_count= " + str(d_count))
                     d_index1 = 0
                     d_index2 = 0
-                    d_tuple = ()
+                    d_list = []
                     for i in range(d_count):
                         d_index2 = tmp[d_index1:].index("\"data\"")
                         logging.info("d_index2= " + str(d_index2))
-                        #tmp = tmp[d_index:]
-                        #logging.info("tmp=" + str(tmp))
-                        data = int(tmp[d_index1 + d_index2 + 4], 16)
-                        d_tuple = d_tuple + (data,)
-                        logging.info("tuple=" + str(d_tuple))
+                        #data = int(tmp[d_index1 + d_index2 + 4], 16)   # int version
+                        data = tmp[d_index1 + d_index2 + 4]             # hex version
+                        d_list.append(data)
+                        logging.info("d_list=" + str(d_list))
                         d_index1 = d_index1 + d_index2 + 1
-                    suspicious_device_data_list.append(d_tuple)
-                    logging.info("d_tuple= " + str(d_tuple))
+                    suspicious_device_data_list.append(d_list)
+                    logging.info("d_list= " + str(d_list))
 
             #data_occurence_first = transaction_split.index("\"data\"")
             #data_occurence_count = transaction_split.count("\"data\"")
@@ -405,10 +407,8 @@ def main():
 
     # report suspicious_device_data_list
     logging.info("\n")
-    logging.info("suspicious_device_data_list: " + str(suspicious_device_data_list))
-
-
-
+    logging.info("ADDRESS_" + hex(WATCH_ADDRESS) + "__REGISTER_" + hex(WATCH_REGISTER) + "read_from_list= " + str(suspicious_device_data_list))
+    
     # write the statistics to the files
     stat_file_abs_name = input_file_abs_name[:input_file_abs_name.find('.')] + '_stats_write.stat'
     try:
