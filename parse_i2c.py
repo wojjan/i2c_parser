@@ -3,6 +3,7 @@ import os
 import glob
 import argparse
 import logging
+import time
 
 SMT_PATH = ""
 CONFIG_FILE_NAME = "config.cfg"
@@ -43,7 +44,8 @@ stats_read_from = {}
 stats_write = {}
 transactions_unknown_list = [] # stores timestamp of unknown transactions
 
-suspicious_device_data_list = []
+watched_device_data_list = []
+broken_transaction = []
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -106,41 +108,44 @@ def transaction_analyse(transaction, lines):
     global transaction_read_from_count
     global transactions
     global transactions_unknown
-    global suspicious_device_data_list
+    global watched_device_data_list
+    global broken_transaction
     
     transactions += 1
     transaction_split = transaction.split(",")
-    logging.info(transaction_split)
-    logging.info(transaction_split.count("\"address\""))
+    logging.debug(transaction_split)
+    logging.debug(transaction_split.count("\"address\""))
     
     if 0 == transaction_split.count("\"address\""):
         transactions_unknown_list.append(transaction_split[1])
         transactions_unknown += 1
         return FAILURE
     address_occurence_first = transaction_split.index("\"address\"")
-    logging.info(f"address_occurence_first={address_occurence_first}")
+    logging.debug(f"address_occurence_first={address_occurence_first}")
     # f"lines={lines}"
     transaction_address = int(transaction_split[address_occurence_first + 3], 16)
 
-    logging.info("transaction_address = " + str(hex(transaction_address)) + " (" + str(transaction_address) + ")")
+    logging.debug("transaction_address = " + str(hex(transaction_address)) + " (" + str(transaction_address) + ")")
     try:    
         transaction_register = int(transaction_split[address_occurence_first + 11], 16)
-        logging.info("TRANSACTION_READ: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
+        logging.debug("TRANSACTION_READ: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
     except ValueError:
         transactions_unknown_list.append(transaction_split[address_occurence_first+1])
         transactions_unknown += 1
         return FAILURE
         
+    transaction_timestamp = transaction_split[1]
+    
     if "true" == transaction_split[address_occurence_first + 6]:
         transaction_type = TRANSACTION_READ
         transaction_read_count += 1
-        logging.info("TRANSACTION_READ")
+        logging.debug("TRANSACTION_READ")
     else:
         if 1 == transaction_split.count("\"address\""):
             transaction_type = TRANSACTION_WRITE
             transaction_write_count += 1
             transaction_register = int(transaction_split[address_occurence_first + 11], 16)
-            logging.info("TRANSACTION_WRITE: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
+            logging.debug("TRANSACTION_WRITE: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
             data_number = transaction_split.count("\"data\"")
             statistics_update(stats_write, transaction_address, transaction_register, data_number)
             return OK
@@ -153,33 +158,38 @@ def transaction_analyse(transaction, lines):
             logging.info("TRANSACTION_READ_FROM: transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
             data_number = transaction_split.count("\"data\"") - 1
             statistics_update(stats_read_from, transaction_address, transaction_register, data_number)
-                
+            
+            if 0 == data_number:
+                broken_transaction.append([0, transaction_address, transaction_register, transaction_timestamp])
+            if 1 == data_number:
+                broken_transaction.append([1, transaction_address, transaction_register, transaction_timestamp])
+            
             if WATCH_ADDRESS == transaction_address:
                 if WATCH_REGISTER == transaction_register:
-                    logging.info("transaction_address = 0x70 AND transaction_register = 0x97")
+                    logging.debug("transaction_address = 0x70 AND transaction_register = 0x97")
                     # first "data" is for register number - skip it
                     tmp = transaction_split[transaction_split.index("\"data\"")+1:]
-                    logging.info("tmp =" + str(tmp))
+                    logging.debug("tmp =" + str(tmp))
                     d_count = tmp.count("\"data\"")
-                    logging.info("d_count= " + str(d_count))
+                    logging.debug("d_count= " + str(d_count))
                     d_index1 = 0
                     d_index2 = 0
                     d_list = []
                     for i in range(d_count):
                         d_index2 = tmp[d_index1:].index("\"data\"")
-                        logging.info("d_index2= " + str(d_index2))
+                        logging.debug("d_index2= " + str(d_index2))
                         #data = int(tmp[d_index1 + d_index2 + 4], 16)   # int version
                         data = tmp[d_index1 + d_index2 + 4]             # hex version
                         d_list.append(data)
-                        logging.info("d_list=" + str(d_list))
+                        logging.debug("d_list=" + str(d_list))
                         d_index1 = d_index1 + d_index2 + 1
-                    suspicious_device_data_list.append(d_list)
-                    logging.info("d_list= " + str(d_list))
+                    watched_device_data_list.append(d_list)
+                    logging.debug("d_list= " + str(d_list))
 
             #data_occurence_first = transaction_split.index("\"data\"")
             #data_occurence_count = transaction_split.count("\"data\"")
-            #logging.info("data_occurence_first = " + str(data_occurence_first))
-            #logging.info("data_occurence_count = " + str(data_occurence_count))
+            #logging.debug("data_occurence_first = " + str(data_occurence_first))
+            #logging.debug("data_occurence_count = " + str(data_occurence_count))
             return OK
         else:
             logging.warning("\"address\" occured "+ str(transaction_split.count("\"address\"")) + " time(s) in line " + str(lines))
@@ -188,43 +198,42 @@ def transaction_analyse(transaction, lines):
             transactions_unknown += 1
             return FAILURE
 
-    logging.info(transaction_split[address_occurence_first + 5])
     return OK
     
 '''
 def statistics_update(stat, address, register, data_number):
-    #logging.info("transaction_register = " + str(hex(transaction_register)))
-    #logging.info("transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
+    #logging.debug("transaction_register = " + str(hex(transaction_register)))
+    #logging.debug("transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
     if address in stat:
-        logging.info("address in stat " + str(stat))
-        logging.info(str(stat[address]))
+        logging.debug("address in stat " + str(stat))
+        logging.debug(str(stat[address]))
         register_stats = stat[address]
         if register in register_stats:
-            logging.info("register in stat " + str(register_stats))
+            logging.debug("register in stat " + str(register_stats))
             v = register_stats[register]
             v += 1
             register_stats.update({register: v})
-            logging.info("register updated in stat " + str(register_stats))
+            logging.debug("register updated in stat " + str(register_stats))
         else:
-            logging.info("register NOT in register_stats " + str(register_stats))
+            logging.debug("register NOT in register_stats " + str(register_stats))
             register_stats.update({register: 1}) # a new entry at register number level
-            logging.info("updated register_stats " + str(register_stats))
+            logging.debug("updated register_stats " + str(register_stats))
             stat.update({address: register_stats})
-            logging.info("register NOT in register_stats - updated stat " + str(stat[address]))
+            logging.debug("register NOT in register_stats - updated stat " + str(stat[address]))
     else:
         stat.update({address: {register: 1}}) # a new entry at device number level
-        logging.info("address(" + str(address) + ") NOT in stat, updated: " + str(stat))
+        logging.debug("address(" + str(address) + ") NOT in stat, updated: " + str(stat))
 '''    
     
 def statistics_update(stat, address, register, data_number):
-    #logging.info("transaction_register = " + str(hex(transaction_register)))
-    #logging.info("transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
+    #logging.debug("transaction_register = " + str(hex(transaction_register)))
+    #logging.debug("transaction_register = " + str(hex(transaction_register)) + " (" + str(transaction_register) + ")")
     if address in stat:
-        logging.info("address in stat " + str(stat))
-        logging.info(str(stat[address]))
+        logging.debug("address in stat " + str(stat))
+        logging.debug(str(stat[address]))
         register_stats = stat[address]
         if register in register_stats:
-            logging.info("register in stat " + str(register_stats))
+            logging.debug("register in stat " + str(register_stats))
             ops_per_data_number = register_stats[register]
             if data_number in ops_per_data_number:
                 v = ops_per_data_number[data_number]
@@ -233,17 +242,17 @@ def statistics_update(stat, address, register, data_number):
             else:
                 ops_per_data_number.update({data_number: 1}) # a new entry at data_number level
             register_stats.update({register: ops_per_data_number})
-            logging.info("register updated in stat " + str(register_stats))
+            logging.debug("register updated in stat " + str(register_stats))
         else:
-            logging.info("register NOT in register_stats " + str(register_stats))
+            logging.debug("register NOT in register_stats " + str(register_stats))
             register_stats.update({register: {data_number: 1}}) # a new entry at register number level
-            logging.info("updated register_stats " + str(register_stats))
+            logging.debug("updated register_stats " + str(register_stats))
             
         stat.update({address: register_stats})
-        logging.info("register NOT in register_stats - updated stat " + str(stat[address]))
+        logging.debug("register NOT in register_stats - updated stat " + str(stat[address]))
     else:
         stat.update({address: {register: {data_number: 1}}}) # a new entry at device number level
-        logging.info("address(" + str(address) + ") NOT in stat, updated: " + str(stat))
+        logging.debug("address(" + str(address) + ") NOT in stat, updated: " + str(stat))
     
 
 def transaction_verify_suspicious(transaction, lines):
@@ -255,7 +264,7 @@ def transaction_verify_suspicious(transaction, lines):
 
     if 0x70 == transaction_address:
         if 0x97 == transaction_register:
-            logging.info("transaction_address = 0x70 AND transaction_register = 0x97")
+            logging.debug("transaction_address = 0x70 AND transaction_register = 0x97")
             d_count = transaction_split.count("\"data\"")
             d_index = 0
             d_tuple = ()
@@ -263,8 +272,8 @@ def transaction_verify_suspicious(transaction, lines):
                 d_index = transaction_split[d_index:].index("\"data\"")
                 data = int(transaction_split[d_index + 4], 16)
                 d_tuple = d_tuple + (data,)
-            suspicious_device_data_list.append(d_tuple)
-            logging.info("d_tuple= " + str(d_tuple))
+            watched_device_data_list.append(d_tuple)
+            logging.debug("d_tuple= " + str(d_tuple))
 
 
 
@@ -294,7 +303,8 @@ def main():
                 line = input_file.readline()
                 total_lines = total_lines + 1
         logging.info("total lines number = " + str(total_lines))
-                
+        time.sleep(3)
+          
         with open(args.input[0], "r") as input_file:
             logging.info("input_file opened for read")
 
@@ -324,8 +334,8 @@ def main():
                         
                         #split the line into components
                         line_split = line_tmp.split(",")
-                        logging.info("line_split[0]= " + line_split[0])
-                        logging.info("line_split[1]= " + line_split[1])
+                        logging.debug("line_split[0]= " + line_split[0])
+                        logging.debug("line_split[1]= " + line_split[1])
                         # frame format now: type,start_time,duration,"ack","address","read","data"
                         #output_file.write(str(line_split))
                         if line_tmp.startswith(I2C_PHASE_START):
@@ -405,10 +415,23 @@ def main():
     logging.info("\n")
     logging.info("unknown transactions: " + str(transactions_unknown_list))
 
-    # report suspicious_device_data_list
+    # report watched_device_data_list
     logging.info("\n")
-    logging.info("ADDRESS_" + hex(WATCH_ADDRESS) + "__REGISTER_" + hex(WATCH_REGISTER) + "read_from_list= " + str(suspicious_device_data_list))
+    logging.info("ADDRESS_" + hex(WATCH_ADDRESS) + "__REGISTER_" + hex(WATCH_REGISTER) + "read_from_list= " + str(watched_device_data_list))
     
+    # report possible broken_transaction
+    logging.info("\n")
+    logging.info("broken_transaction= " + str(broken_transaction))
+    # and store it
+    broken_transaction_file_abs_name = input_file_abs_name[:input_file_abs_name.find('.')] + '_br_tr.txt'
+    try:
+        broken_transaction_file = open(broken_transaction_file_abs_name, "w")
+        broken_transaction_file.write(str(broken_transaction))
+        broken_transaction_file.close()
+    except:
+        logging.error("can't open stat_file: ", broken_transaction_file_abs_name)
+        sys.exit(1)
+
     # write the statistics to the files
     stat_file_abs_name = input_file_abs_name[:input_file_abs_name.find('.')] + '_stats_write.stat'
     try:
